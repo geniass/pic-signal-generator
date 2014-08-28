@@ -56,24 +56,8 @@
 
 #include <p16f690.inc>
 
-;*******************************************************************************
-;
-; TODO Step #2 - Configuration Word Setup
-;
-; The 'CONFIG' directive is used to embed the configuration word within the
-; .asm file. MPLAB X requires users to embed their configuration words
-; into source code.  See the device datasheet for additional information
-; on configuration word settings.  Device configuration bits descriptions
-; are in C:\Program Files\Microchip\MPLABX\mpasmx\P<device_name>.inc
-; (may change depending on your MPLAB X installation directory).
-;
-; MPLAB X has a feature which generates configuration bits source code.  Go to
-; Window > PIC Memory Views > Configuration Bits.  Configure each field as
-; needed and select 'Generate Source Code to Output'.  The resulting code which
-; appears in the 'Output Window' > 'Config Bits Source' tab may be copied
-; below.
-;
-;*******************************************************************************
+; set default radix to decimal
+list p=16f690, r=dec
 
 __CONFIG _FOSC_INTRCIO & _WDTE_OFF & _PWRTE_OFF & _MCLRE_OFF & _CP_OFF & _CPD_OFF & _BOREN_OFF & _IESO_OFF & _FCMEN_OFF
 
@@ -125,52 +109,10 @@ INDEX       RES 1
 RES_VECT  CODE    0x0000            ; processor reset vector
     GOTO    START                   ; go to beginning of program
 
-;*******************************************************************************
-; TODO Step #4 - Interrupt Service Routines
-;
-; There are a few different ways to structure interrupt routines in the 8
-; bit device families.  On PIC18's the high priority and low priority
-; interrupts are located at 0x0008 and 0x0018, respectively.  On PIC16's and
-; lower the interrupt is at 0x0004.  Between device families there is subtle
-; variation in the both the hardware supporting the ISR (for restoring
-; interrupt context) as well as the software used to restore the context
-; (without corrupting the STATUS bits).
-;
-; General formats are shown below in relocatible format.
-;
-;------------------------------PIC16's and below--------------------------------
-;
-; ISR       CODE    0x0004           ; interrupt vector location
-;
-;     <Search the device datasheet for 'context' and copy interrupt
-;     context saving code here.  Older devices need context saving code,
-;     but newer devices like the 16F#### don't need context saving code.>
-;
-;     RETFIE
-;
-;----------------------------------PIC18's--------------------------------------
-;
-; ISRHV     CODE    0x0008
-;     GOTO    HIGH_ISR
-; ISRLV     CODE    0x0018
-;     GOTO    LOW_ISR
-;
-; ISRH      CODE                     ; let linker place high ISR routine
-; HIGH_ISR
-;     <Insert High Priority ISR Here - no SW context saving>
-;     RETFIE  FAST
-;
-; ISRL      CODE                     ; let linker place low ISR routine
-; LOW_ISR
-;       <Search the device datasheet for 'context' and copy interrupt
-;       context saving code here>
-;     RETFIE
-;
-;*******************************************************************************
 
 ; PUSH and POP macros from datasheet
 ; This Macro Saves register contents
-PUSH_MACRO MACRO 
+PUSH_MACRO MACRO
     MOVWF W_TEMP ; Copy W to a Temporary Register
     ; regardless of current bank
     SWAPF STATUS,W ; Swap STATUS nibbles and place
@@ -180,7 +122,7 @@ PUSH_MACRO MACRO
     ENDM ; End this Macro
 
 ; This Macro Restores register contents
-POP_MACRO MACRO 
+POP_MACRO MACRO
     SWAPF STATUS_TEMP,W ; Swap original STATUS register value
     ; into W (restores original bank)
     MOVWF STATUS ; Restore STATUS register from
@@ -191,39 +133,153 @@ POP_MACRO MACRO
     ; W value without affecting STATUS
     ENDM ; End this Macro
 
+; the fcall macro
+; by Roger Froud of Amytech Ltd.
+fcall	macro subroutine_name
+	local here
+	lcall subroutine_name
+	pagesel here
+here
+	endm
+
 ISR         CODE    0x0004
     PUSH_MACRO
-
     clrf STATUS
-    btfsc INTCON, T0IF
-        goto TMR0_INT
+
+    banksel PIR1
+     btfsc PIR1,TMR2IF
+        goto TMR2_INT
 
 INT_ERROR
     goto END_ISR
 
-TMR0_INT
+TMR2_INT
     ; do something
+    call TOGGLE
+
+    banksel INDEX
     movfw INDEX
     addlw 1
-    call SIN
+    movwf INDEX
+    
+    fcall SIN
     banksel PORTC
     movwf PORTC
-    bcf INTCON, T0IF
-    goto    END_ISR
+
+    banksel INTCON
+    bcf INTCON,GIE
+    banksel PIR1
+    bcf PIR1,TMR2IF
+    goto END_ISR
 
 END_ISR
     POP_MACRO
     RETFIE
 
+
+
 ;*******************************************************************************
 ; MAIN PROGRAM
 ;*******************************************************************************
 
-MAIN_PROG CODE                      
+MAIN_PROG CODE
 
-SIN  addwf PCL, F
-        dt  0,1,2,4,5,6,7,9,10,11,12,14,15,16,17,18,20,21,22,23,24,26,27,28,29,30,31,33,34,35,36,37,38,40,41,42,43,44,45,46,47,48,49,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,66,67,68,69,70,71,72,73,73,74,75,76,77,78,78,79,80,81,81,82,83,83,84,85,85,86,87,87,88,88,89,90,90,91,91,92,92,93,93,93,94,94,95,95,95,96,96,97,97,97,97,98,98,98,98,99,99,99,99,99,99,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,99,99,99,99,99,99,98,98,98,98,97,97,97,97,96,96,95,95,95,94,94,93,93,93,92,92,91,91,90,90,89,88,88,87,87,86,85,85,84,83,83,82,81,81,80,79,78,78,77,76,75,74,73,73,72,71,70,69,68,67,66,66,65,64,63,62,61,60,59,58,57,56,55,54,53,52,51,49,48,47,46,45,44,43,42,41,40,38,37,36,35,34,33,31,30,29,28,27,26,24,23,22,21,20,18,17,16,15,14,12,11,10,9,7,6,5,4,2,1,0
+TOGGLE
+    banksel PORTB
+    movfw PORTB
+    xorlw   b'11110000'     ; toggle bit 0
+    movwf   PORTB
+    return
 
+START
+
+    ;************
+    ; PORT config
+    ;************
+    banksel TRISA
+    movlw b'00000111'
+    movwf TRISA
+
+    banksel TRISC
+    clrf TRISC
+    banksel PORTC
+    clrf PORTC
+
+    banksel TRISB
+    clrf TRISB
+    banksel PORTB
+    clrf PORTB
+
+    ;************
+    ; ADC setup - page 114 of bible
+    ;************
+    banksel ADCON1
+    movlw b'01100000'   ; Freq. = Fosc/64
+    movwf ADCON1
+    
+    banksel ANSEL
+    clrf ANSEL
+    bsf ANSEL, AN2
+
+    banksel ADCON0
+    movlw b'00001001'
+    movwf ADCON0
+
+    ;************
+    ; Timer2 setup
+    ;************
+    banksel INTCON
+    bsf INTCON,GIE
+    bsf INTCON,PEIE
+    banksel T2CON
+    movlw b'00000100'
+    movwf T2CON
+    banksel PR2
+    movlw d'5'
+    movwf PR2
+    banksel PIE1
+    bsf PIE1,TMR2IE
+
+    banksel BINARY
+    clrf BINARY
+    clrf HUNDREDS
+    clrf UNITS_TENS
+    clrf TEMP
+    clrf COUNTER
+    clrf INDEX
+
+
+LOOP
+    ; ADC Delay
+    nop
+    nop
+    nop
+    nop
+    nop
+    banksel ADCON0
+    bsf ADCON0, GO
+    btfsc ADCON0, GO
+    goto $-1
+    ; ADC done
+    banksel ADRESH
+    movfw ADRESH
+    banksel PR2
+    movwf PR2
+    GOTO LOOP
+
+
+
+;TABLES CODE
+
+SIN
+        addwf PCL, F
+        ;dt 127,129,130,132,133,135,136,138,139,141,143,144,146,147,149,150,152,153,155,156,158,159,161,163,164,166,167,168,170,171,173,174,176,177,179,180,181,183,184,186,187,188,190,191,193,194,195,196,198,199,200,202,203,204,205,207,208,209,210,211,213,214,215,216,217,218,219,220,221,222,223,224,225,226,227,228,229,230,231,232,233,234,235,235,236,237,238,239,239,240,241,241,242,243,243,244,245,245,246,246,247,247,248,248,249,249,250,250,250,251,251,251,252,252,252,252,253,253,253,253,253,254,254,254,254,254,254,254,254,254,254,254,254,254,254,253,253,253,253,253,252,252,252,252,251,251,251,250,250,250,249,249,248,248,247,247,246,246,245,245,244,243,243,242,241,241,240,239,239,238,237,236,235,235,234,233,232,231,230,229,228,227,226,225,224,223,222,221,220,219,218,217,216,215,214,213,211,210,209,208,207,205,204,203,202,200,199,198,196,195,194,193,191,190,188,187,186,184,183,181,180,179,177,176,174,173,171,170,168,167,166,164,163,161,159,158,156,155,153,152,150,149,147,146,144,143,141,139,138,136,135,133,132,130,129,127
+        dt .0,.0,.0,.1,.1,.2,.2,.3,.4,.5,.6,.7,.8,.9,.10,.12,.13,.14,.16,.17,.19,.20,.22,.23,.25,.27,.28,.30,.31,.33,.34,.36,.37,.38,.40,.41,.42,.43,.44,.45,.46,.47,.48,.48,.49,.49,.50,.50,.50,.50,.50,.50,.50,.49,.49,.48,.48,.47,.46,.45,.44,.43,.42,.41,.40,.38,.37,.36,.34,.33,.31,.30,.28,.27,.25,.23,.22,.20,.19,.17,.16,.14,.13,.12,.10,.9,.8,.7,.6,.5,.4,.3,.2,.2,.1,.1,.0,.0,.0,.0,.0,.0,.0,.1,.1,.2,.2,.3,.4,.5,.6,.7,.8,.9,.10,.12,.13,.14,.16,.17,.19,.20,.22,.23,.25,.27,.28,.30,.31,.33,.34,.36,.37,.38,.40,.41,.42,.43,.44,.45,.46,.47,.48,.48,.49,.49,.50,.50,.50,.50,.50,.50,.50,.49,.49,.48,.48,.47,.46,.45,.44,.43,.42,.41,.40,.38,.37,.36,.34,.33,.31,.30,.28,.27,.25,.23,.22,.20,.19,.17,.16,.14,.13,.12,.10,.9,.8,.7,.6,.5,.4,.3,.2,.2,.1,.1,.0,.0,.0,.0,.0,.0,.0,.1,.1,.2,.2,.3,.4,.5,.6,.7,.8,.9,.10,.12,.13,.14,.16,.17,.19,.20,.22,.23,.25,.27,.28,.30,.31,.33,.34,.36,.37,.38,.40,.41,.42,.43,.44,.45,.46,.47,.48,.48,.49,.49,.50,.50,.50,.50,.50,.50,.50,.49,.0
+
+
+;*************************
+; BCD Algorithm
+;*************************
 ; sets LSB of dig register to CARRY
 check_c MACRO dig
     btfsc STATUS, C
@@ -295,38 +351,4 @@ BCD movlw d'8'
 
 
 
-START
-
-    banksel TRISC
-    clrf TRISC
-    banksel PORTC
-    movlw b'11110111'
-    movwf PORTC
-
-    ; Timer setup
-    banksel INTCON
-    bsf     INTCON,T0IE
-    bcf     INTCON,INTF
-    bsf     INTCON,GIE
-    banksel OPTION_REG
-    bcf OPTION_REG, T0CS
-    bcf OPTION_REG, PSA ; give prescaler to tmr0
-    bsf OPTION_REG, 0   ;
-    bsf OPTION_REG, 1   ;
-    bcf OPTION_REG, 2   ; prescaler: 1:255
-
-    banksel BINARY
-    clrf BINARY
-    clrf HUNDREDS
-    clrf UNITS_TENS
-    clrf TEMP
-    clrf COUNTER
-    clrf INDEX
-
-    movlw   d'255'
-    movwf BINARY
-    call BCD
-
-    GOTO $                          ; loop forever
-
-    END
+END
