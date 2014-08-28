@@ -162,7 +162,7 @@ TMR2_INT
     addlw 1
     movwf INDEX
     
-    fcall SIN
+    ;fcall SIN
     banksel PORTC
     movwf PORTC
 
@@ -219,7 +219,7 @@ START
     
     banksel ANSEL
     clrf ANSEL
-    bsf ANSEL, AN2
+    ;bsf ANSEL, RA2
 
     banksel ADCON0
     movlw b'00001001'
@@ -232,10 +232,10 @@ START
     bsf INTCON,GIE
     bsf INTCON,PEIE
     banksel T2CON
-    movlw b'00000100'
+    movlw b'01111111'
     movwf T2CON
     banksel PR2
-    movlw d'5'
+    movlw d'0'
     movwf PR2
     banksel PIE1
     bsf PIE1,TMR2IE
