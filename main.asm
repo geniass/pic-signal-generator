@@ -100,6 +100,7 @@ COUNTER     RES 1
 BINARY      RES 1
 TEMP        RES 1
 INDEX       RES 1
+OFFSET      RES 1
 INVERT      RES 1
 
 
@@ -166,7 +167,7 @@ TMR2_INT
     call TOGGLE_INVERT
     movfw INDEX
     
-    fcall SIN
+    call SIN
     banksel INVERT
     btfsc INVERT,0      ; if INVERT, invert the sin wave
     sublw .255
@@ -191,15 +192,16 @@ MAIN_PROG CODE
 
 ;TABLES CODE
 SIN
-    movlw  high   (SIN_TABLE)
-   movwf  PCLATH
-   movfw   INDEX
-   addlw  SIN_TABLE
-   skpnc
-    incf  PCLATH,f
-   movwf  PCL
+    movlw LOW SIN_TABLE
+    addwf INDEX, W             ; add index to LOW SIN_TABLE, store in OFFSET
+    movwf OFFSET            ;
+    movlw HIGH SIN_TABLE
+    btfsc STATUS, C         ; if LOW overflowed, increment HIGH
+    addlw 1
+    movwf PCLATH
+    movfw OFFSET
+    movwf PCL
 SIN_TABLE
-        ;addwf PCL, F
         dt 128,129,130,132,133,135,136,138,139,141,143,144,146,147,149,150,152,
         dt 153,155,156,158,159,161,163,164,166,167,168,170,171,173,174,176,177,
         dt 179,180,181,183,184,186,187,188,190,191,193,194,195,196,198,199,200,
@@ -258,7 +260,7 @@ START
     ; ADC setup - page 114 of bible
     ;************
     banksel ADCON1
-    movlw b'01100000'   ; Freq. = Fosc/64
+    movlw b'00100000'   ; Freq. = Fosc/32
     movwf ADCON1
     
     banksel ANSEL
