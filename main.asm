@@ -190,13 +190,14 @@ END_ISR
 
 MAIN_PROG CODE
 
-;TABLES CODE
+; AN556
+; http://ww1.microchip.com/downloads/en/AppNotes/00556e.pdf
 SIN
     movlw LOW SIN_TABLE
-    addwf INDEX, W             ; add index to LOW SIN_TABLE, store in OFFSET
-    movwf OFFSET            ;
+    addwf INDEX, W              ; add index to LOW SIN_TABLE, store in OFFSET
+    movwf OFFSET                ;
     movlw HIGH SIN_TABLE
-    btfsc STATUS, C         ; if LOW overflowed, increment HIGH
+    btfsc STATUS, C             ; if LOW overflowed, increment HIGH
     addlw 1
     movwf PCLATH
     movfw OFFSET
@@ -281,7 +282,7 @@ START
     movlw b'01111111'
     movwf T2CON
     banksel PR2
-    movlw d'10'
+    movlw d'210'
     movwf PR2
     banksel PIE1
     bsf PIE1,TMR2IE
