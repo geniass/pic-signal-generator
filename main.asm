@@ -156,7 +156,6 @@ INT_ERROR
     goto END_ISR
 
 TMR2_INT
-    ; do something
     ;call TOGGLE
 
     banksel INDEX
@@ -227,8 +226,6 @@ TOGGLE_INVERT
     movfw INVERT
     xorlw 0xFF
     movwf INVERT
-;    banksel PORTB
-;    movwf PORTB
     return
 
 TOGGLE
@@ -263,7 +260,7 @@ START
     banksel ADCON1
     movlw b'00100000'   ; Freq. = Fosc/32
     movwf ADCON1
-    
+
     banksel ANSEL
     clrf ANSEL
     ;bsf ANSEL, RA2
@@ -274,15 +271,16 @@ START
 
     ;************
     ; Timer2 setup
+    ; Period = PR2 * 1/((Fosc/4) / (pre*post)
     ;************
     banksel INTCON
     bsf INTCON,GIE
     bsf INTCON,PEIE
     banksel T2CON
-    movlw b'01111111'
+    movlw b'01111101'
     movwf T2CON
     banksel PR2
-    movlw d'210'
+    movlw d'10'
     movwf PR2
     banksel PIE1
     bsf PIE1,TMR2IE
