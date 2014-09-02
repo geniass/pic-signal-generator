@@ -167,7 +167,7 @@ TMR2_INT
     call TOGGLE_INVERT
     movfw INDEX
     
-    call SIN
+    fcall SIN
     banksel INVERT
     btfsc INVERT,0      ; if INVERT, invert the sin wave
     sublw .255
