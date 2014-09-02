@@ -102,6 +102,7 @@ TEMP        RES 1
 INDEX       RES 1
 OFFSET      RES 1
 INVERT      RES 1
+POT_VAL     RES 1
 
 
 ;*******************************************************************************
@@ -172,6 +173,11 @@ TMR2_INT
     sublw .255
     banksel PORTC
     movwf PORTC
+
+    banksel POT_VAL
+    movfw POT_VAL
+    banksel PR2
+    movwf PR2
 
     banksel INTCON
     bcf INTCON,GIE
@@ -263,7 +269,7 @@ START
 
     banksel ANSEL
     clrf ANSEL
-    ;bsf ANSEL, RA2
+    bsf ANSEL, RA2
 
     banksel ADCON0
     movlw b'00001001'
@@ -293,24 +299,26 @@ START
     clrf COUNTER
     clrf INDEX
     clrf INVERT
+    movlw d'50'         ; default POT_VAL
+    movwf POT_VAL
 
 
 LOOP
     ; ADC Delay
-;    nop
-;    nop
-;    nop
-;    nop
-;    nop
-;    banksel ADCON0
-;    bsf ADCON0, GO
-;    btfsc ADCON0, GO
-;    goto $-1
-;    ; ADC done
-;    banksel ADRESH
-;    movfw ADRESH
-;    banksel PR2
-;    movwf PR2
+    nop
+    nop
+    nop
+    nop
+    nop
+    banksel ADCON0
+    bsf ADCON0, GO
+    btfsc ADCON0, GO
+    goto $-1
+    ; ADC done
+    banksel ADRESH
+    movfw ADRESH
+    banksel POT_VAL
+    movwf POT_VAL
 
     GOTO LOOP
 
