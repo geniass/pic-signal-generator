@@ -161,18 +161,13 @@ TMR2_INT
 
     banksel INDEX
     movfw INDEX
-    addlw 1
+    addlw 5
     movwf INDEX
     btfsc STATUS, C
     call TOGGLE_INVERT
     movfw INDEX
     
-    fcall SIN
-    banksel INVERT
-    btfsc INVERT,0      ; if INVERT, invert the sin wave
-    sublw .255
-    banksel PORTC
-    movwf PORTC
+    
 
     banksel POT_VAL
     movfw POT_VAL
@@ -283,10 +278,10 @@ START
     bsf INTCON,GIE
     bsf INTCON,PEIE
     banksel T2CON
-    movlw b'01111101'
+    movlw b'00000101'
     movwf T2CON
     banksel PR2
-    movlw d'10'
+    movlw d'50'
     movwf PR2
     banksel PIE1
     bsf PIE1,TMR2IE
@@ -304,6 +299,13 @@ START
 
 
 LOOP
+    fcall SIN
+    banksel INVERT
+    btfsc INVERT,0      ; if INVERT, invert the sin wave
+    sublw .255
+    banksel PORTC
+    movwf PORTC
+
     ; ADC Delay
     nop
     nop
