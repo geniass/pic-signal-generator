@@ -105,7 +105,13 @@ INVERT      RES 1
 PHASE_INCR  RES 1
 PHASE_ACCL  RES 1
 PHASE_ACCH  RES 1
-POT_VAL     RES 1
+; ***************
+; 0) SIN
+; 1) SQUARE
+; 2) SAWTOOTH
+; 3) TRIANGLE
+; ***************
+MODE        RES 1
 
 
 ;*******************************************************************************
@@ -148,6 +154,8 @@ fcall	macro subroutine_name
 here
 	endm
 
+
+
 ISR         CODE    0x0004
     PUSH_MACRO
     clrf STATUS
@@ -155,6 +163,9 @@ ISR         CODE    0x0004
     banksel PIR1
     btfsc PIR1,ADIF
         goto ADC_INT
+    banksel INTCON
+    btfsc INTCON, INTF
+        goto EDG_INT
 
 ADC_INT
     banksel ADRESH
@@ -163,8 +174,18 @@ ADC_INT
     movlw 5
     movwf PHASE_INCR
 
-banksel PIR1
+    banksel PIR1
     bcf PIR1, ADIF
+
+EDG_INT
+    incf MODE
+    movfw MODE
+    xorlw 4             ; MODE = 4 is invalid, wrap to 0
+    btfsc STATUS, Z     ;
+    clrf MODE           ;
+
+    banksel INTCON
+    bcf INTCON, INTF
 
 ;INT_ERROR
 ;    goto END_ISR
@@ -182,7 +203,7 @@ MAIN_PROG CODE
 
 ; AN556
 ; http://ww1.microchip.com/downloads/en/AppNotes/00556e.pdf
-SIN
+SIN_CALL
     movlw LOW SIN_TABLE
     addwf PHASE_ACCL, W         ; add PHASE_ACCH to LOW SIN_TABLE, store in OFFSET
     movwf OFFSET                ;
@@ -244,17 +265,22 @@ START
 
     banksel ANSEL
     clrf ANSEL
-    bsf ANSEL, RA2
+    bsf ANSEL, RA3
 
     banksel ADCON0
-    movlw b'00001001'
+    movlw b'00001101'       ; AN3
     movwf ADCON0
 
     banksel PIE1
     ;bsf PIE1, ADIE
+
     banksel INTCON
     bsf INTCON,GIE
     bsf INTCON,PEIE
+    bcf INTCON, INTF
+    bsf INTCON, INTE
+    banksel OPTION_REG
+    bsf OPTION_REG, INTEDG
 
     banksel BINARY
     clrf BINARY
@@ -266,6 +292,7 @@ START
     clrf INVERT
     clrf PHASE_ACCL
     clrf PHASE_ACCH
+    clrf MODE
     movlw 5
     movwf PHASE_INCR
 
@@ -300,22 +327,26 @@ LOOP
     ;btfsc STATUS, C             ; LOW carried, add to HIGH
     ;incf PHASE_ACCH
 
-    movlw 0x01
-    btfsc STATUS, C             ; HIGH carried, toggle INVERT since HIGH is the index
-    xorwf INVERT, F
+    movlw high MODES
+    movwf PCLATH
+    movfw MODE
+    addwf PCL, F
 
-    fcall SIN
-    banksel INVERT
-    btfsc INVERT,0      ; if INVERT, invert the sin wave
-    sublw .255          ; this may need to be 254 to get rid of some distortion
+MODES
+    goto SIN
+    goto SQUARE
+    goto SAWTOOTH
+    goto TRIANGLE
+
+WRITE_PORTC
     banksel PORTC
     movwf PORTC
 
-    banksel INTCON
-    btfsc INTCON,T0IF
-    call RUN_ADC
-
-    call CHECK_ADC
+;    banksel INTCON
+;    btfsc INTCON,T0IF
+;    call RUN_ADC
+;
+;    call CHECK_ADC
     
 
 ;    banksel ADCON0
@@ -329,6 +360,27 @@ LOOP
 ;    movwf PHASE_INCR
 
     GOTO LOOP
+
+SIN
+    movlw 0x01
+    btfsc STATUS, C             ; HIGH carried, toggle INVERT since HIGH is the index
+    xorwf INVERT, F
+
+    fcall SIN_CALL
+    banksel INVERT
+    btfsc INVERT,0      ; if INVERT, invert the sin wave
+    sublw .255          ; this may need to be 254 to get rid of some distortion
+    movfw PHASE_ACCL
+    goto WRITE_PORTC
+
+SQUARE
+    goto WRITE_PORTC
+
+SAWTOOTH
+    goto WRITE_PORTC
+
+TRIANGLE
+    goto WRITE_PORTC
 
 RUN_ADC
     banksel ADCON0
@@ -344,7 +396,7 @@ CHECK_ADC
     banksel ADRESH
     movfw ADRESH
     banksel PHASE_INCR
-    movlw 10                ; temp, remove once adc is stable
+    movlw 1                ; temp, remove once adc is stable
     movwf PHASE_INCR
 
     banksel PIR1
