@@ -94,17 +94,6 @@ STATUS_TEMP
 endc
 
 UDATA
-HUNDREDS    RES 1
-UNITS_TENS  RES 1
-COUNTER     RES 1
-BINARY      RES 1
-TEMP        RES 1
-INDEX       RES 1
-OFFSET      RES 1
-INVERT      RES 1
-PHASE_INCR  RES 1
-PHASE_ACCL  RES 1
-PHASE_ACCH  RES 1
 ; ***************
 ; 0) SIN
 ; 1) SQUARE
@@ -112,6 +101,17 @@ PHASE_ACCH  RES 1
 ; 3) TRIANGLE
 ; ***************
 MODE        RES 1
+INDEX       RES 1
+OFFSET      RES 1
+INVERT      RES 1
+PHASE_INCR  RES 1
+PHASE_ACCL  RES 1
+PHASE_ACCH  RES 1
+HUNDREDS    RES 1
+UNITS_TENS  RES 1
+COUNTER     RES 1
+BINARY      RES 1
+TEMP        RES 1
 
 
 ;*******************************************************************************
@@ -183,6 +183,7 @@ EDG_INT
     xorlw 4             ; MODE = 4 is invalid, wrap to 0
     btfsc STATUS, Z     ;
     clrf MODE           ;
+    call TOGGLE         ; debugging
 
     banksel INTCON
     bcf INTCON, INTF
@@ -245,6 +246,11 @@ START
     banksel TRISA
     movlw b'00000111'
     movwf TRISA
+    banksel OPTION_REG
+    bsf OPTION_REG, NOT_RABPU
+    banksel WPUA
+    movlw b'00000110'
+    movwf WPUA
 
     banksel TRISC
     clrf TRISC
@@ -265,10 +271,10 @@ START
 
     banksel ANSEL
     clrf ANSEL
-    bsf ANSEL, RA3
+    bsf ANSEL, 0       ; AN0 (RA0)
 
     banksel ADCON0
-    movlw b'00001101'       ; AN3
+    movlw b'00000001'       ; AN0
     movwf ADCON0
 
     banksel PIE1
@@ -292,8 +298,7 @@ START
     clrf INVERT
     clrf PHASE_ACCL
     clrf PHASE_ACCH
-    clrf MODE
-    movlw 5
+    movlw 10
     movwf PHASE_INCR
 
     banksel OPTION_REG
@@ -319,18 +324,19 @@ START
 ;    banksel PIE1
     ;bsf PIE1,TMR2IE
 
+    banksel MODE
+    clrf MODE                   ; This one must be last. I don't know why
 
 LOOP
-    banksel PHASE_INCR
-    movfw PHASE_INCR
-    addwf PHASE_ACCL, F
-    ;btfsc STATUS, C             ; LOW carried, add to HIGH
-    ;incf PHASE_ACCH
-
-    movlw high MODES
+    movlw LOW MODES
+    addwf MODE, W               ; add PHASE_ACCH to LOW SIN_TABLE, store in OFFSET
+    movwf OFFSET                ;
+    movlw HIGH MODES
+    btfsc STATUS, C             ; if LOW overflowed, increment HIGH
+    addlw 1
     movwf PCLATH
-    movfw MODE
-    addwf PCL, F
+    movfw OFFSET
+    movwf PCL
 
 MODES
     goto SIN
@@ -362,25 +368,49 @@ WRITE_PORTC
     GOTO LOOP
 
 SIN
+    call ADD_PHASE_INCR
+
     movlw 0x01
-    btfsc STATUS, C             ; HIGH carried, toggle INVERT since HIGH is the index
+    btfsc STATUS, C             ; Adding incr to acc carried; toggle INVERT
     xorwf INVERT, F
 
     fcall SIN_CALL
     banksel INVERT
     btfsc INVERT,0      ; if INVERT, invert the sin wave
     sublw .255          ; this may need to be 254 to get rid of some distortion
-    movfw PHASE_ACCL
     goto WRITE_PORTC
 
+
 SQUARE
+    call ADD_PHASE_INCR
     goto WRITE_PORTC
 
 SAWTOOTH
+    call ADD_PHASE_INCR
+    movfw PHASE_ACCL
     goto WRITE_PORTC
 
 TRIANGLE
+    call ADD_PHASE_INCR
+
+;    movlw 0x01
+;    btfsc STATUS, C             ; Adding incr to acc carried; toggle INVERT
+;    xorwf INVERT, F
+
+;    movfw PHASE_ACCL
+;    banksel INVERT
+;    btfsc INVERT,0      ; if INVERT, invert the accumulator (straight line gradient of -1)
+;    sublw .255          ; this may need to be 254 to get rid of some distortion
+;    movwf PHASE_ACCL
+
     goto WRITE_PORTC
+
+ADD_PHASE_INCR
+    banksel PHASE_INCR
+    movfw PHASE_INCR
+    addwf PHASE_ACCL, F
+    movfw PHASE_ACCL
+    return
 
 RUN_ADC
     banksel ADCON0
