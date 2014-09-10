@@ -229,7 +229,7 @@ SIN_TABLE
         dt 221,220,219,218,217,216,215,214,213,211,210,209,208,207,205,204,203,
         dt 202,200,199,198,196,195,194,193,191,190,188,187,186,184,183,181,180,
         dt 179,177,176,174,173,171,170,168,167,166,164,163,161,159,158,156,155,
-        dt 153,152,150,149,147,146,144,143,141,139,138,136,135,133,132,130,129,127
+        dt 153,152,150,149,147,146,144,143,141,139,138,136,135,133,132,130,129,127      ; chaning 127 to 128 may reduce distortion
 
 TOGGLE
     banksel PORTB
@@ -383,6 +383,14 @@ SIN
 
 SQUARE
     call ADD_PHASE_INCR
+
+    movlw 0x01
+    btfsc STATUS, C             ; Adding incr to acc carried; toggle INVERT
+    xorwf INVERT, F
+    movlw 0
+    btfss INVERT, 0
+    movlw 255
+
     goto WRITE_PORTC
 
 SAWTOOTH
@@ -393,15 +401,14 @@ SAWTOOTH
 TRIANGLE
     call ADD_PHASE_INCR
 
-;    movlw 0x01
-;    btfsc STATUS, C             ; Adding incr to acc carried; toggle INVERT
-;    xorwf INVERT, F
+    movlw 0x01
+    btfsc STATUS, C             ; Adding incr to acc carried; toggle INVERT
+    xorwf INVERT, F
 
-;    movfw PHASE_ACCL
-;    banksel INVERT
-;    btfsc INVERT,0      ; if INVERT, invert the accumulator (straight line gradient of -1)
-;    sublw .255          ; this may need to be 254 to get rid of some distortion
-;    movwf PHASE_ACCL
+    movfw PHASE_ACCL
+    banksel INVERT
+    btfsc INVERT,0      ; if INVERT, invert the accumulator (straight line gradient of -1)
+    sublw .255          ; this may need to be 254 to get rid of some distortion
 
     goto WRITE_PORTC
 
