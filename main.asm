@@ -160,22 +160,9 @@ ISR         CODE    0x0004
     PUSH_MACRO
     clrf STATUS
 
-    banksel PIR1
-    btfsc PIR1,ADIF
-        goto ADC_INT
     banksel INTCON
     btfsc INTCON, INTF
         goto EDG_INT
-
-ADC_INT
-    banksel ADRESH
-    movfw ADRESH
-    banksel PHASE_INCR
-    movlw 5
-    movwf PHASE_INCR
-
-    banksel PIR1
-    bcf PIR1, ADIF
 
 EDG_INT
     incf MODE
@@ -187,10 +174,6 @@ EDG_INT
 
     banksel INTCON
     bcf INTCON, INTF
-
-;INT_ERROR
-;    goto END_ISR
-
 
 END_ISR
     POP_MACRO
@@ -277,8 +260,8 @@ START
     movlw b'00000001'       ; AN0
     movwf ADCON0
 
-    banksel PIE1
-    ;bsf PIE1, ADIE
+    banksel PIR1
+    bcf PIR1, ADIF
 
     banksel INTCON
     bsf INTCON,GIE
@@ -348,27 +331,25 @@ WRITE_PORTC
     banksel PORTC
     movwf PORTC
 
-;    banksel INTCON
-;    btfsc INTCON,T0IF
-;    call RUN_ADC
-;
-;    call CHECK_ADC
-    
-
-;    banksel ADCON0
-;    bsf ADCON0, GO
-;    btfsc ADCON0, GO
-;    goto $-1
-;    ; ADC done
-;    banksel ADRESH
-;    movfw ADRESH
-;    banksel PHASE_INCR
-;    movwf PHASE_INCR
+    banksel PORTA
+    btfsc PORTA, RA1        ; only read pot if button pressed
+    call ADC
 
     GOTO LOOP
 
+ADD_PHASE_INCR MACRO
+    banksel PHASE_INCR
+    movfw PHASE_INCR
+    addwf PHASE_ACCL, F
+    movfw PHASE_ACCL
+ENDM
+
 SIN
-    call ADD_PHASE_INCR
+    ; Sampling rate ~100KSps so 40% ~41KHz (max output freq)
+    ; Fout = M / (T * 512) ~= 200 / (512 * 9.8e-6) = 40KHz (according to ide stopwatch)
+    ; where M = phase incr, T = sampling period, ie time to execute the loop once
+    ; Fout(min) ~= 199Hz so incr of ~5 in M increments "KHz" reading by 1
+    ADD_PHASE_INCR
 
     movlw 0x01
     btfsc STATUS, C             ; Adding incr to acc carried; toggle INVERT
@@ -382,7 +363,7 @@ SIN
 
 
 SQUARE
-    call ADD_PHASE_INCR
+    ADD_PHASE_INCR
 
     movlw 0x01
     btfsc STATUS, C             ; Adding incr to acc carried; toggle INVERT
@@ -394,12 +375,12 @@ SQUARE
     goto WRITE_PORTC
 
 SAWTOOTH
-    call ADD_PHASE_INCR
+    ADD_PHASE_INCR
     movfw PHASE_ACCL
     goto WRITE_PORTC
 
 TRIANGLE
-    call ADD_PHASE_INCR
+    ADD_PHASE_INCR
 
     movlw 0x01
     btfsc STATUS, C             ; Adding incr to acc carried; toggle INVERT
@@ -412,11 +393,16 @@ TRIANGLE
 
     goto WRITE_PORTC
 
-ADD_PHASE_INCR
-    banksel PHASE_INCR
-    movfw PHASE_INCR
-    addwf PHASE_ACCL, F
-    movfw PHASE_ACCL
+ADC
+    
+
+    banksel INTCON
+    btfsc INTCON,T0IF       ; Time to run the ADC
+    call RUN_ADC
+
+    banksel PIR1
+    btfsc PIR1, ADIF        ; ADC Done
+    call READ_ADC
     return
 
 RUN_ADC
@@ -426,14 +412,10 @@ RUN_ADC
     bcf INTCON,T0IF
     return
 
-CHECK_ADC
-    banksel PIR1
-    btfss PIR1, ADIF
-    return
+READ_ADC
     banksel ADRESH
     movfw ADRESH
     banksel PHASE_INCR
-    movlw 1                ; temp, remove once adc is stable
     movwf PHASE_INCR
 
     banksel PIR1
