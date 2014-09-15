@@ -101,6 +101,7 @@ UDATA
 ; 3) TRIANGLE
 ; ***************
 MODE        RES 1
+ONE_HOT     RES 1
 INDEX       RES 1
 OFFSET      RES 1
 INVERT      RES 1
@@ -112,6 +113,7 @@ UNITS_TENS  RES 1
 COUNTER     RES 1
 BINARY      RES 1
 TEMP        RES 1
+MASK        RES 1
 
 
 ;*******************************************************************************
@@ -163,6 +165,7 @@ ISR         CODE    0x0004
     banksel INTCON
     btfsc INTCON, INTF
         goto EDG_INT
+    goto END_ISR        ; no match
 
 EDG_INT
     incf MODE
@@ -172,8 +175,11 @@ EDG_INT
     clrf MODE           ;
     call TOGGLE         ; debugging
 
+    call SHIFT_OUT
+
     banksel INTCON
     bcf INTCON, INTF
+    goto END_ISR
 
 END_ISR
     POP_MACRO
@@ -213,6 +219,47 @@ SIN_TABLE
         dt 202,200,199,198,196,195,194,193,191,190,188,187,186,184,183,181,180,
         dt 179,177,176,174,173,171,170,168,167,166,164,163,161,159,158,156,155,
         dt 153,152,150,149,147,146,144,143,141,139,138,136,135,133,132,130,129,127      ; chaning 127 to 128 may reduce distortion
+
+; Converts binary encoding to one hot encoding (upto 4)
+ONE_HOT_CALL
+    movlw LOW ONE_HOT_TABLE
+    addwf MODE, W
+    movwf OFFSET
+    movlw HIGH ONE_HOT_TABLE
+    btfsc STATUS, C             ; if LOW overflowed, increment HIGH
+    addlw 1
+    movwf PCLATH
+    movfw OFFSET
+    movwf PCL
+ONE_HOT_TABLE
+    dt 1, 2, 4, 8               ; each entry is left shifted (mult by 2)
+
+; Shifts the mode and frequency data out to the shift register
+SHIFT_OUT
+    banksel PORTB
+    movfw MODE          ; convert MODE to one-hot
+    fcall ONE_HOT_CALL
+    movwf ONE_HOT
+
+    movlw 8
+    movwf COUNTER
+    movlw 1
+    movwf MASK
+SHIFT_OUT_LOOP
+    bcf PORTB, RB7
+    movfw MASK
+    andwf ONE_HOT, W
+    sublw 0
+    btfss STATUS, C     ; bit is clear (carry for subtract => bit in MODE is set)
+    bsf PORTB, RB6      ; set data pin
+    btfsc STATUS, C     ; bit is set
+    bcf PORTB, RB6
+    bsf PORTB, RB7      ; set clock pin
+    bcf STATUS, C
+    rlf MASK
+    decfsz COUNTER
+    goto SHIFT_OUT_LOOP
+    return
 
 TOGGLE
     banksel PORTB
