@@ -108,12 +108,18 @@ INVERT      RES 1
 PHASE_INCR  RES 1
 PHASE_ACCL  RES 1
 PHASE_ACCH  RES 1
-HUNDREDS    RES 1
-UNITS_TENS  RES 1
-COUNTER     RES 1
-BINARY      RES 1
-TEMP        RES 1
 MASK        RES 1
+mult1       RES 1
+mult2       RES 1
+resLo       RES 1
+resHi       RES 1
+binH        RES 1
+binL        RES 1
+bcdH        RES 1
+bcdM        RES 1
+bcdL        RES 1
+counter     RES 1
+temp        RES 1
 
 
 ;*******************************************************************************
@@ -175,7 +181,7 @@ EDG_INT
     clrf MODE           ;
     call TOGGLE         ; debugging
 
-    call SHIFT_OUT
+    call DISPLAY_FREQ_MODE
 
     banksel INTCON
     bcf INTCON, INTF
@@ -234,6 +240,22 @@ ONE_HOT_CALL
 ONE_HOT_TABLE
     dt 1, 2, 4, 8               ; each entry is left shifted (mult by 2)
 
+DISPLAY_FREQ_MODE
+    ; frequency and mode calculation and output
+    ; TODO: other waves
+    movlw 217           ; Fout = M / (512 * 9e-6)  constant part of frequency calculation found in SIN
+    movwf mult1
+    movfw PHASE_INCR
+    movwf mult2
+    fcall _multiply8x8
+    movfw resLo
+    movwf binL
+    movfw resHi
+    movwf binH
+    fcall _bin2bcd
+    call SHIFT_OUT
+    return
+
 ; Shifts the mode and frequency data out to the shift register
 SHIFT_OUT
     banksel PORTB
@@ -241,11 +263,11 @@ SHIFT_OUT
     fcall ONE_HOT_CALL
     movwf ONE_HOT
 
-    movlw 8
-    movwf COUNTER
+    movlw 4             ; only 4 LSBs
+    movwf counter
     movlw 1
     movwf MASK
-SHIFT_OUT_LOOP
+MODE_LOOP
     bcf PORTB, RB7
     movfw MASK
     andwf ONE_HOT, W
@@ -257,8 +279,28 @@ SHIFT_OUT_LOOP
     bsf PORTB, RB7      ; set clock pin
     bcf STATUS, C
     rlf MASK
-    decfsz COUNTER
-    goto SHIFT_OUT_LOOP
+    decfsz counter
+    goto MODE_LOOP
+
+    ; TODO: output two digits ie 10's of KHz and 1's of KHz (or more)
+    movlw 4             ; only 4 LSBs
+    movwf counter
+    movlw 1
+    movwf MASK
+HUNDREDS_LOOP
+    bcf PORTB, RB7
+    movfw MASK
+    andwf bcdH, W
+    sublw 0
+    btfss STATUS, C     ; bit is clear (carry for subtract => bit in MODE is set)
+    bsf PORTB, RB6      ; set data pin
+    btfsc STATUS, C     ; bit is set
+    bcf PORTB, RB6
+    bsf PORTB, RB7      ; set clock pin
+    bcf STATUS, C
+    rlf MASK
+    decfsz counter
+    goto HUNDREDS_LOOP
     return
 
 TOGGLE
@@ -318,18 +360,24 @@ START
     banksel OPTION_REG
     bsf OPTION_REG, INTEDG
 
-    banksel BINARY
-    clrf BINARY
-    clrf HUNDREDS
-    clrf UNITS_TENS
-    clrf TEMP
-    clrf COUNTER
+    banksel INDEX
     clrf INDEX
     clrf INVERT
     clrf PHASE_ACCL
     clrf PHASE_ACCH
+    clrf MODE
+    clrf ONE_HOT
     movlw 10
     movwf PHASE_INCR
+    clrf resHi
+    clrf resLo
+    clrf binH
+    clrf binL
+    clrf bcdH
+    clrf bcdM
+    clrf bcdL
+    clrf counter
+    clrf temp
 
     banksel OPTION_REG
     movlw b'00000111'           ; enable tmr0
@@ -467,81 +515,105 @@ READ_ADC
 
     banksel PIR1
     bcf PIR1, ADIF
+
+    call DISPLAY_FREQ_MODE
     return
 
+; ************************
+; Unsigned 8-bit multiplication
+; From http://picprojects.org.uk/projects/pictips.htm#8_x_8_multiply
+; http://picprojects.org.uk/projects/inf/disclaimer.htm
 
-;*************************
-; BCD Algorithm
-;*************************
-; sets LSB of dig register to CARRY
-check_c MACRO dig
-    btfsc STATUS, C
-    set_high dig
-    btfss STATUS, C
-    set_low dig
-    ENDM
-set_high    MACRO   dig
-    bsf dig, 0
-    ENDM
-set_low    MACRO   dig
-    bcf dig, 0
-    ENDM
+; enter with terms to multiply in mult1, mult2
+; resHi, ResLo contain 16 bit result on exit
+; value in mult2 will is destroyed
+; ************************
+_multiply8x8
+    movfw   mult1           ; load mult1 into W reg
+    clrf    resHi           ; initialise resHi, ResLo
+    clrf    resLo
+    bsf     resLo,7         ; set bit 7 in resLo to use as loop counter
 
-; TODO: optimise
-BCD movlw d'8'
-    movwf COUNTER
-    banksel BINARY
-    movfw   BINARY
-    SHIFT_LOOP
-        ; check HUNDREDS >= 5
-        movlw 4
-        movwf TEMP
-        movfw HUNDREDS
-        subwf TEMP, f          ; subrtact from 4 so a carry results if HUNDREDS >= 5
-        btfss STATUS, C
-        addlw d'3'          ; add 3
-        movwf HUNDREDS      ; move back to HUNDREDS
+_mloop
+    rrf     mult2,F         ; rotate mult2 one bit right
+    skpnc                   ; test bit shifted out of mult2
+    addwf   resHi,F         ; if it was a 1, add W to ResHi
+    rrf     resHi,F         ; shift 16 bit result right one bit
+    rrf     resLo,F         ;
+    skpc                    ; skip next if carry set as we have shifted 8 times
+    goto    _mloop          ; if carry was not set, loop again
 
-        ; check TENS >= 5
-        movlw 0x40
-        movwf TEMP
-        movfw UNITS_TENS
-        andlw 0xF0              ; ignore last 4 bits
-        subwf TEMP, f
-        btfss STATUS, C
-        addlw 0x30
-        movwf TEMP
-        movfw UNITS_TENS
-        andlw 0x0F
-        iorwf TEMP, w
-        movwf UNITS_TENS
+    return
 
-        ; check units >= 5
-        movlw 4
-        movwf TEMP
-        movfw UNITS_TENS
-        andlw 0x0F          ; ignore first 4 bits
-        subwf TEMP, f         ; subtract from 4
-        btfss STATUS, C
-        addlw d'3'
-        movwf TEMP
-        movfw UNITS_TENS
-        andlw 0xF0          ; ignore last 4 bits
-        iorwf TEMP, w
-        movwf UNITS_TENS
+; ********************************************
+; 16-bit binary to BCD conversion
+; pete griffiths 2007
+; http://picprojects.org.uk/projects/pictips.htm
+; ********************************************
+; ********************************************
+; These file register variables will
+; need to be defined elsewhere.
+; binH
+; binL
+; bcdH
+; bcdM
+; bcdL
+; counter
+; temp
+;
+; binH, binL contain the binary value to
+; convert. Conversion process destroys contents.
+; Result is in bcdH, bcdM, bcdL on return.
+; Call _bin2bcd to perform conversion.
+;
+; Executes in 454 instructions
+; *********************************************
 
-        bcf STATUS, C
-        rlf HUNDREDS        ; rotate left hundreds first, then tens, units
-        rlf UNITS_TENS
-        ;movfw HUNDREDS
-        check_c HUNDREDS    ; if carry, set LSB of HUNDREDS
-        rlf BINARY
-        check_c UNITS_TENS  ; if carry, set LSB of UNITS_TENS
+_bin2bcd    movlw     d'16'
+            movwf     counter
+            clrf      bcdL
+            clrf      bcdM
+            clrf      bcdH
 
-        decfsz COUNTER
-        goto SHIFT_LOOP
-        return
+ _repeat    rlf       binL,F
+            rlf       binH,F
+            rlf       bcdL,F
+            rlf       bcdM,F
+            rlf       bcdH,F
 
+            decfsz    counter,F
+            goto      _adjust
+            return
 
+_adjust     movlw     d'14'
+            subwf     counter,W
+            skpnc
+            goto      _repeat
+            movfw     bcdL
+            addlw     0x33
+            movwf     temp
+            movfw     bcdL
+            btfsc     temp,3
+            addlw     0x03
+            btfsc     temp,7
+            addlw     0x30
+            movwf     bcdL
+            movfw     bcdM
+            addlw     0x33
+            movwf     temp
+            movfw     bcdM
+            btfsc     temp,3
+            addlw     0x03
+            btfsc     temp,7
+            addlw     0x30
+            movwf     bcdM
+            goto      _repeat
+; we only need to do the test and add +3 for
+; the low and middle bcd variables since the
+; largest binary value is 0xFFFF which is
+; 65535 decimal so the high bcd byte variable
+; will never be greater than 6.
+; We also skip the tests for the first two
+; shifts.
 
 END
