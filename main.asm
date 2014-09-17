@@ -120,7 +120,7 @@ bcdM        RES 1
 bcdL        RES 1
 counter     RES 1
 temp        RES 1
-
+delay_count RES 1
 
 ;*******************************************************************************
 ; Reset Vector
@@ -226,6 +226,14 @@ SIN_TABLE
         dt 179,177,176,174,173,171,170,168,167,166,164,163,161,159,158,156,155,
         dt 153,152,150,149,147,146,144,143,141,139,138,136,135,133,132,130,129,127      ; chaning 127 to 128 may reduce distortion
 
+DELAY
+    movlw 40
+    movwf delay_count
+DELAY_LOOP
+    decfsz delay_count
+    goto DELAY_LOOP
+    return
+
 ; Converts binary encoding to one hot encoding (upto 4)
 ONE_HOT_CALL
     movlw LOW ONE_HOT_TABLE
@@ -239,6 +247,25 @@ ONE_HOT_CALL
     movwf PCL
 ONE_HOT_TABLE
     dt 1, 2, 4, 8               ; each entry is left shifted (mult by 2)
+
+; Converts BCD to 7 seg display encoding (common cathode, ie active high)
+SEVEN_SEG_CALL
+    movwf temp
+    movlw LOW SEVEN_SEG_TABLE
+    addwf temp, W
+    movwf OFFSET
+    movlw HIGH SEVEN_SEG_TABLE
+    btfsc STATUS, C             ; if LOW overflowed, increment HIGH
+    addlw 1
+    movwf PCLATH
+    movfw OFFSET
+    movwf PCL
+SEVEN_SEG_TABLE
+    ; order is a,b,c,d,e,f,g
+    ; each entry represents the pins on the seven seg display that should be high
+    ; for the digits 0 to 9
+    dt b'11111100', b'01100000', b'11011010', b'11110010', b'01100110'
+    dt b'10110110', b'10111110', b'11100000', b'11111110', b'11100110'
 
 DISPLAY_FREQ_MODE
     ; frequency and mode calculation and output
@@ -256,16 +283,103 @@ DISPLAY_FREQ_MODE
     call SHIFT_OUT
     return
 
+RRF4
+    banksel temp
+    movwf temp
+    movlw 4
+    movwf counter
+RRF4_LOOP
+    rrf temp, F
+    decfsz counter
+    goto RRF4_LOOP
+    movfw temp
+    return
+
+
 ; Shifts the mode and frequency data out to the shift register
 SHIFT_OUT
     banksel PORTB
+; enable when more 7 segs connected
+; if shift registers are used instead of bcd decoders (probably) then change this
+; to use the 7seg lookup table
+;    movlw 4             ; only 4 LSBs
+;    movwf counter
+;    movlw b'00000001'
+;    movwf MASK
+;TEN_KHZ_LOOP
+;    bcf PORTB, RB7
+;    movfw MASK
+;    andwf bcdH W
+;    sublw 0
+;    btfss STATUS, C     ; bit is clear (carry for subtract => bit in MODE is set)
+;    bsf PORTB, RB6      ; set data pin
+;    btfsc STATUS, C     ; bit is set
+;    bcf PORTB, RB6
+;    bsf PORTB, RB7      ; set clock pin
+;    bcf STATUS, C
+;    rlf MASK
+;    decfsz counter
+;    goto TEN_KHZ_LOOP
+
+
+
+    movfw bcdM
+    call RRF4
+    andlw b'00001111'   ; only 4 MSBs
+    call SEVEN_SEG_CALL
+    movwf temp
+    comf temp, F
+    movlw 8             ; All 8 bits to control seven seg
+    movwf counter
+    movlw b'10000000'
+    movwf MASK
+KHZ_LOOP
+    bcf PORTB, RB7
+    movfw MASK
+    andwf temp, W
+    sublw 0
+    btfss STATUS, C     ; bit is clear (carry for subtract => bit in MODE is set)
+    bsf PORTB, RB6      ; set data pin
+    btfsc STATUS, C     ; bit is set
+    bcf PORTB, RB6
+    call DELAY
+    bsf PORTB, RB7      ; set clock pin
+    bcf STATUS, C
+    rrf MASK
+    decfsz counter
+    goto KHZ_LOOP
+
+    movfw bcdM
+    andlw b'00001111'   ; only 4 MSBs
+    call SEVEN_SEG_CALL
+    movwf temp
+    comf temp, F
+    movlw 8             ; All 8 bits to control seven seg
+    movwf counter
+    movlw b'10000000'
+    movwf MASK
+HUNDREDS_HZ_LOOP
+    bcf PORTB, RB7
+    movfw MASK
+    andwf temp, W
+    sublw 0
+    btfss STATUS, C     ; bit is clear (carry for subtract => bit in MODE is set)
+    bsf PORTB, RB6      ; set data pin
+    btfsc STATUS, C     ; bit is set
+    bcf PORTB, RB6
+    bsf PORTB, RB7      ; set clock pin
+    bcf STATUS, C
+    rlf MASK
+    decfsz counter
+    goto HUNDREDS_HZ_LOOP
+
     movfw MODE          ; convert MODE to one-hot
     fcall ONE_HOT_CALL
     movwf ONE_HOT
 
-    movlw 4             ; only 4 LSBs
+    movlw 8             ; only 4 LSBs
     movwf counter
-    movlw 1
+    movlw b'00000001'
     movwf MASK
 MODE_LOOP
     bcf PORTB, RB7
@@ -276,31 +390,12 @@ MODE_LOOP
     bsf PORTB, RB6      ; set data pin
     btfsc STATUS, C     ; bit is set
     bcf PORTB, RB6
+    call DELAY
     bsf PORTB, RB7      ; set clock pin
     bcf STATUS, C
     rlf MASK
     decfsz counter
     goto MODE_LOOP
-
-    ; TODO: output two digits ie 10's of KHz and 1's of KHz (or more)
-    movlw 4             ; only 4 LSBs
-    movwf counter
-    movlw 1
-    movwf MASK
-HUNDREDS_LOOP
-    bcf PORTB, RB7
-    movfw MASK
-    andwf bcdH, W
-    sublw 0
-    btfss STATUS, C     ; bit is clear (carry for subtract => bit in MODE is set)
-    bsf PORTB, RB6      ; set data pin
-    btfsc STATUS, C     ; bit is set
-    bcf PORTB, RB6
-    bsf PORTB, RB7      ; set clock pin
-    bcf STATUS, C
-    rlf MASK
-    decfsz counter
-    goto HUNDREDS_LOOP
     return
 
 TOGGLE
