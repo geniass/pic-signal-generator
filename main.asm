@@ -270,7 +270,7 @@ SEVEN_SEG_TABLE
 DISPLAY_FREQ_MODE
     ; frequency and mode calculation and output
     ; TODO: other waves
-    movlw 217           ; Fout = M / (512 * 9e-6)  constant part of frequency calculation found in SIN
+    movlw 199           ; Fout = M / (512 * 9.8e-6)  constant part of frequency calculation found in SIN
     movwf mult1
     movfw PHASE_INCR
     movwf mult2
@@ -299,29 +299,30 @@ RRF4_LOOP
 ; Shifts the mode and frequency data out to the shift register
 SHIFT_OUT
     banksel PORTB
-; enable when more 7 segs connected
-; if shift registers are used instead of bcd decoders (probably) then change this
-; to use the 7seg lookup table
-;    movlw 4             ; only 4 LSBs
-;    movwf counter
-;    movlw b'00000001'
-;    movwf MASK
-;TEN_KHZ_LOOP
-;    bcf PORTB, RB7
-;    movfw MASK
-;    andwf bcdH W
-;    sublw 0
-;    btfss STATUS, C     ; bit is clear (carry for subtract => bit in MODE is set)
-;    bsf PORTB, RB6      ; set data pin
-;    btfsc STATUS, C     ; bit is set
-;    bcf PORTB, RB6
-;    bsf PORTB, RB7      ; set clock pin
-;    bcf STATUS, C
-;    rlf MASK
-;    decfsz counter
-;    goto TEN_KHZ_LOOP
 
-
+    movfw bcdH
+    andlw b'00001111'   ; only 4 MSBs
+    call SEVEN_SEG_CALL
+    movwf temp
+    comf temp, F
+    movlw 8             ; All 8 bits to control seven seg
+    movwf counter
+    movlw b'10000000'
+    movwf MASK
+TEN_KHZ_LOOP
+    bcf PORTB, RB7
+    movfw MASK
+    andwf temp, W
+    sublw 0
+    btfss STATUS, C     ; bit is clear (carry for subtract => bit in MODE is set)
+    bsf PORTB, RB6      ; set data pin
+    btfsc STATUS, C     ; bit is set
+    bcf PORTB, RB6
+    bsf PORTB, RB7      ; set clock pin
+    bcf STATUS, C
+    rrf MASK
+    decfsz counter
+    goto TEN_KHZ_LOOP
 
     movfw bcdM
     call RRF4
@@ -369,7 +370,7 @@ HUNDREDS_HZ_LOOP
     bcf PORTB, RB6
     bsf PORTB, RB7      ; set clock pin
     bcf STATUS, C
-    rlf MASK
+    rrf MASK
     decfsz counter
     goto HUNDREDS_HZ_LOOP
 
@@ -462,7 +463,7 @@ START
     clrf PHASE_ACCH
     clrf MODE
     clrf ONE_HOT
-    movlw 10
+    movlw 100
     movwf PHASE_INCR
     clrf resHi
     clrf resLo
