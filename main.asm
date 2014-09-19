@@ -418,6 +418,17 @@ MODE_LOOP
     rlf MASK
     decfsz counter
     goto MODE_LOOP
+
+    ; mux selection; only 2 bits needed to represent all possible modes
+    btfsc MODE, 0
+    bsf PORTB, RB4      ; set mux bit 0
+    btfss MODE, 0
+    bcf PORTB, RB4
+    btfsc MODE, 1
+    bsf PORTB, RB5      ; set mux bit 1
+    btfss MODE, 1
+    bcf PORTB, RB5
+
     return
 
 TOGGLE
