@@ -269,8 +269,33 @@ SEVEN_SEG_TABLE
 
 DISPLAY_FREQ_MODE
     ; frequency and mode calculation and output
-    ; TODO: other waves
+    movfw MODE          ; convert MODE to one-hot
+    fcall ONE_HOT_CALL
+    movwf ONE_HOT
+
+    btfsc ONE_HOT, 0     ; SIN
+    goto SIN_FREQ
+    btfsc ONE_HOT, 1    ; SQUARE
+    goto SQUARE_FREQ
+    btfsc ONE_HOT, 2    ; SAW
+    goto SAW_FREQ
+    btfsc ONE_HOT, 3    ; TRIANGLE
+    goto TRIANGLE_FREQ
+
+SIN_FREQ
     movlw 199           ; Fout = M / (512 * 9.8e-6)  constant part of frequency calculation found in SIN
+    goto FREQ_CALC
+SQUARE_FREQ
+    movlw 59            ; Fout = M / (256 * 6.6e-6) = 591 = 59.1 * 10 (high by factor of 10)
+    goto FREQ_CALC
+SAW_FREQ
+    movlw 70            ; Fout = M / (256 * 5.6e-6) = 697 ~= 70 * 10
+    goto FREQ_CALC
+TRIANGLE_FREQ
+    movlw 28            ; Fout = M / (512 * 7e-6) = 279 ~= 28 * 10
+    goto FREQ_CALC
+
+FREQ_CALC
     movwf mult1
     movfw PHASE_INCR
     movwf mult2
@@ -373,10 +398,6 @@ HUNDREDS_HZ_LOOP
     rrf MASK
     decfsz counter
     goto HUNDREDS_HZ_LOOP
-
-    movfw MODE          ; convert MODE to one-hot
-    fcall ONE_HOT_CALL
-    movwf ONE_HOT
 
     movlw 8             ; only 4 LSBs
     movwf counter
@@ -501,6 +522,8 @@ START
     banksel MODE
     clrf MODE                   ; This one must be last. I don't know why
 
+    call DISPLAY_FREQ_MODE
+
 LOOP
     movlw LOW MODES
     addwf MODE, W               ; add PHASE_ACCH to LOW SIN_TABLE, store in OFFSET
@@ -536,6 +559,7 @@ ADD_PHASE_INCR MACRO
 ENDM
 
 SIN
+    ; Time to run SIN loop = 9.8 uS
     ; Sampling rate ~100KSps so 40% ~41KHz (max output freq)
     ; Fout = M / (T * 512) ~= 200 / (512 * 9.8e-6) = 40KHz (according to ide stopwatch)
     ; where M = phase incr, T = sampling period, ie time to execute the loop once
@@ -554,6 +578,7 @@ SIN
 
 
 SQUARE
+    ; Time to run SQUARE loop = 6.6 uS
     ADD_PHASE_INCR
 
     movlw 0x01
@@ -566,11 +591,13 @@ SQUARE
     goto WRITE_PORTC
 
 SAWTOOTH
+    ; Time to run SAWTOOTH loop = 5.6 uS
     ADD_PHASE_INCR
     movfw PHASE_ACCL
     goto WRITE_PORTC
 
 TRIANGLE
+    ; Time to run TRIANGLE loop = 7 uS
     ADD_PHASE_INCR
 
     movlw 0x01
