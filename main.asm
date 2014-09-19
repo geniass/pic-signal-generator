@@ -29,12 +29,13 @@
 ;                                                                              *
 ;*******************************************************************************
 ;                                                                              *
-;    Filename:                                                                 *
-;    Date:                                                                     *
-;    File Version:                                                             *
-;    Author:                                                                   *
-;    Company:                                                                  *
-;    Description:                                                              *
+;    Filename:      main.asm                                                   *
+;    Date:          19/09/2014                                                 *
+;    File Version:  1                                                          *
+;    Author:        Ari Isaac Croock                                           *
+;    Student No.:   718005                                                     *
+;    Description:   Signal generator capable of generating sine, square,       *
+;                       sawtooth and triangle waves at various frequencies        *
 ;                                                                              *
 ;*******************************************************************************
 ;                                                                              *
@@ -42,15 +43,9 @@
 ;                                                                              *
 ;*******************************************************************************
 ;                                                                              *
-;    Known Issues: This template is designed for relocatable code.  As such,   *
-;    build errors such as "Directive only allowed when generating an object    *
-;    file" will result when the 'Build in Absolute Mode' checkbox is selected  *
-;    in the project properties.  Designing code in absolute mode is            *
-;    antiquated - use relocatable mode.                                        *
-;                                                                              *
-;*******************************************************************************
-;                                                                              *
-;    Revision History:                                                         *
+;    Known Issues:                                                             *
+;        *) 7 Segment displays flicker when changing frequency                 *
+;            (implement a clear pin)                                           *
 ;                                                                              *
 ;*******************************************************************************
 
@@ -224,7 +219,7 @@ SIN_TABLE
         dt 221,220,219,218,217,216,215,214,213,211,210,209,208,207,205,204,203,
         dt 202,200,199,198,196,195,194,193,191,190,188,187,186,184,183,181,180,
         dt 179,177,176,174,173,171,170,168,167,166,164,163,161,159,158,156,155,
-        dt 153,152,150,149,147,146,144,143,141,139,138,136,135,133,132,130,129,127      ; chaning 127 to 128 may reduce distortion
+        dt 153,152,150,149,147,146,144,143,141,139,138,136,135,133,132,130,129,127
 
 DELAY
     movlw 40
@@ -326,11 +321,11 @@ SHIFT_OUT
     banksel PORTB
 
     movfw bcdH
-    andlw b'00001111'   ; only 4 MSBs
+    andlw b'00001111'       ; only 4 MSBs
     call SEVEN_SEG_CALL
     movwf temp
     comf temp, F
-    movlw 8             ; All 8 bits to control seven seg
+    movlw 8                 ; All 8 bits to control seven seg
     movwf counter
     movlw b'10000000'
     movwf MASK
@@ -339,11 +334,11 @@ TEN_KHZ_LOOP
     movfw MASK
     andwf temp, W
     sublw 0
-    btfss STATUS, C     ; bit is clear (carry for subtract => bit in MODE is set)
-    bsf PORTB, RB6      ; set data pin
-    btfsc STATUS, C     ; bit is set
+    btfss STATUS, C         ; bit is clear (carry for subtract => bit in MODE is set)
+    bsf PORTB, RB6          ; set data pin
+    btfsc STATUS, C         ; bit is set
     bcf PORTB, RB6
-    bsf PORTB, RB7      ; set clock pin
+    bsf PORTB, RB7          ; set clock pin
     bcf STATUS, C
     rrf MASK
     decfsz counter
@@ -351,11 +346,11 @@ TEN_KHZ_LOOP
 
     movfw bcdM
     call RRF4
-    andlw b'00001111'   ; only 4 MSBs
+    andlw b'00001111'       ; only 4 MSBs
     call SEVEN_SEG_CALL
     movwf temp
     comf temp, F
-    movlw 8             ; All 8 bits to control seven seg
+    movlw 8                 ; All 8 bits to control seven seg
     movwf counter
     movlw b'10000000'
     movwf MASK
@@ -364,23 +359,23 @@ KHZ_LOOP
     movfw MASK
     andwf temp, W
     sublw 0
-    btfss STATUS, C     ; bit is clear (carry for subtract => bit in MODE is set)
-    bsf PORTB, RB6      ; set data pin
-    btfsc STATUS, C     ; bit is set
+    btfss STATUS, C         ; bit is clear (carry for subtract => bit in MODE is set)
+    bsf PORTB, RB6          ; set data pin
+    btfsc STATUS, C         ; bit is set
     bcf PORTB, RB6
     call DELAY
-    bsf PORTB, RB7      ; set clock pin
+    bsf PORTB, RB7          ; set clock pin
     bcf STATUS, C
     rrf MASK
     decfsz counter
     goto KHZ_LOOP
 
     movfw bcdM
-    andlw b'00001111'   ; only 4 MSBs
+    andlw b'00001111'       ; only 4 MSBs
     call SEVEN_SEG_CALL
     movwf temp
     comf temp, F
-    movlw 8             ; All 8 bits to control seven seg
+    movlw 8                 ; All 8 bits to control seven seg
     movwf counter
     movlw b'10000000'
     movwf MASK
@@ -389,17 +384,17 @@ HUNDREDS_HZ_LOOP
     movfw MASK
     andwf temp, W
     sublw 0
-    btfss STATUS, C     ; bit is clear (carry for subtract => bit in MODE is set)
-    bsf PORTB, RB6      ; set data pin
-    btfsc STATUS, C     ; bit is set
+    btfss STATUS, C         ; bit is clear (carry for subtract => bit in MODE is set)
+    bsf PORTB, RB6          ; set data pin
+    btfsc STATUS, C         ; bit is set
     bcf PORTB, RB6
-    bsf PORTB, RB7      ; set clock pin
+    bsf PORTB, RB7          ; set clock pin
     bcf STATUS, C
     rrf MASK
     decfsz counter
     goto HUNDREDS_HZ_LOOP
 
-    movlw 8             ; only 4 LSBs
+    movlw 8                 ; only 4 LSBs
     movwf counter
     movlw b'00000001'
     movwf MASK
@@ -408,12 +403,12 @@ MODE_LOOP
     movfw MASK
     andwf ONE_HOT, W
     sublw 0
-    btfss STATUS, C     ; bit is clear (carry for subtract => bit in MODE is set)
-    bsf PORTB, RB6      ; set data pin
-    btfsc STATUS, C     ; bit is set
+    btfss STATUS, C         ; bit is clear (carry for subtract => bit in MODE is set)
+    bsf PORTB, RB6          ; set data pin
+    btfsc STATUS, C         ; bit is set
     bcf PORTB, RB6
     call DELAY
-    bsf PORTB, RB7      ; set clock pin
+    bsf PORTB, RB7          ; set clock pin
     bcf STATUS, C
     rlf MASK
     decfsz counter
@@ -421,11 +416,11 @@ MODE_LOOP
 
     ; mux selection; only 2 bits needed to represent all possible modes
     btfsc MODE, 0
-    bsf PORTB, RB4      ; set mux bit 0
+    bsf PORTB, RB4          ; set mux bit 0
     btfss MODE, 0
     bcf PORTB, RB4
     btfsc MODE, 1
-    bsf PORTB, RB5      ; set mux bit 1
+    bsf PORTB, RB5          ; set mux bit 1
     btfss MODE, 1
     bcf PORTB, RB5
 
@@ -466,12 +461,12 @@ START
     ; ADC setup - page 114 of bible
     ;************
     banksel ADCON1
-    movlw b'01100000'   ; Freq. = Fosc/32
+    movlw b'01100000'       ; Freq. = Fosc/32
     movwf ADCON1
 
     banksel ANSEL
     clrf ANSEL
-    bsf ANSEL, 0       ; AN0 (RA0)
+    bsf ANSEL, 0            ; AN0 (RA0)
 
     banksel ADCON0
     movlw b'00000001'       ; AN0
@@ -511,25 +506,6 @@ START
     movlw b'00000111'           ; enable tmr0
     movwf OPTION_REG
 
-    ;************
-    ; Timer2 setup
-    ; Period = PR2 * 1/((Fosc/4) / (pre*post)
-    ; This timer is the reference clock for DDS
-    ; For a clock of 10KHz for DDS we need: pre*post=2, PR2=256, Fosc/4=5MHz => overflows at 9765Hz
-    ; Max clock freq is probably determined by the time taken to execute all other instructions
-    ;************
-;    banksel INTCON
-;    bsf INTCON,GIE
-;    bsf INTCON,PEIE
-;    banksel T2CON
-;    movlw b'00001100'
-;    movwf T2CON
-;    banksel PR2
-;    movlw d'55'
-;    movwf PR2
-;    banksel PIE1
-    ;bsf PIE1,TMR2IE
-
     banksel MODE
     clrf MODE                   ; This one must be last. I don't know why
 
@@ -557,7 +533,7 @@ WRITE_PORTC
     movwf PORTC
 
     banksel PORTA
-    btfsc PORTA, RA1        ; only read pot if button pressed
+    btfsc PORTA, RA1            ; only read pot if button pressed
     call ADC
 
     GOTO LOOP
@@ -583,8 +559,8 @@ SIN
 
     fcall SIN_CALL
     banksel INVERT
-    btfsc INVERT,0      ; if INVERT, invert the sin wave
-    sublw .255          ; this may need to be 254 to get rid of some distortion
+    btfsc INVERT,0              ; if INVERT, invert the sin wave
+    sublw .255                  ; this may need to be 254 to get rid of some distortion
     goto WRITE_PORTC
 
 
@@ -617,20 +593,18 @@ TRIANGLE
 
     movfw PHASE_ACCL
     banksel INVERT
-    btfsc INVERT,0      ; if INVERT, invert the accumulator (straight line gradient of -1)
-    sublw .255          ; this may need to be 254 to get rid of some distortion
+    btfsc INVERT,0              ; if INVERT, invert the accumulator (straight line gradient of -1)
+    sublw .255                  ; this may need to be 254 to get rid of some distortion
 
     goto WRITE_PORTC
 
 ADC
-    
-
     banksel INTCON
-    btfsc INTCON,T0IF       ; Time to run the ADC
+    btfsc INTCON,T0IF           ; Time to run the ADC
     call RUN_ADC
 
     banksel PIR1
-    btfsc PIR1, ADIF        ; ADC Done
+    btfsc PIR1, ADIF            ; ADC Done
     call READ_ADC
     return
 
