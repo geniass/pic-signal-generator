@@ -1,0 +1,1 @@
+{"name":"Pic-signal-generator","tagline":"ELEN2006 2014 Project - A signal generator using a PIC16F690","body":"PIC Signal Generator\r\n====\r\nThe source code for a signal generator (written in MPASM) - capable of\r\ngenerating sine, square, triangular and sawtooth waveforms.\r\n","google":"","note":"Don't delete this file! It's used internally to help with page regeneration."}
